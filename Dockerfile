@@ -1,22 +1,30 @@
 # Use a lean base image for PHP-FPM on Alpine Linux
 FROM php:8.3-fpm-alpine
 
-# Core Setup: Install necessary system packages for PHP and cURL/Guzzle
-RUN apk update && apk add \
+# Core Setup: Install necessary system packages for PHP and extensions
+# NOTE: mysql-client and mariadb-dev are required for pdo_mysql extension
+# NOTE: zlib-dev is required for the zip extension
+# NOTE: icu-dev is required for the intl extension
+RUN apk update && apk add --no-cache \
     git \
     curl \
-    # Required PHP dependencies for Guzzle (HTTP client) and Monolog (logging)
     libxml2-dev \
     libzip-dev \
-    icu-dev
+    # Add missing system dependencies for extensions
+    zlib-dev \
+    mariadb-dev \
+    mysql-client \
+    icu-dev 
 
 # Install PHP extensions
 # json: Essential for JSON file handling and API payloads
+# pdo_mysql: Installed for potential future database use
 # zip: Necessary for Composer dependency management
 # intl: Often required by Monolog and general localization/formatting
 # curl: Essential for Guzzle and handling API communications (like Gemini)
 RUN docker-php-ext-install \
     json \
+    pdo_mysql \
     zip \
     intl \
     curl
