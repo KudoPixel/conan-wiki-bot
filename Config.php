@@ -3,9 +3,8 @@
 /**
  * Project Configuration Manager.
  *
- * This class handles the loading of environment variables from the .env file
- * and provides static access to all necessary configuration parameters,
- * ensuring clean separation of concerns.
+ * This class handles loading environment variables from both the system's environment
+ * and a local .env file (if it exists), providing a unified way to access configuration.
  */
 
 use Dotenv\Dotenv;
@@ -18,9 +17,10 @@ class Config
     private static $isLoaded = false;
 
     /**
-     * Loads the environment variables from the .env file.
-     * This method must be called before accessing any environment variables.
-     * If the .env file is not found, it throws an exception.
+     * Loads environment variables.
+     * It first attempts to load from a .env file for local development.
+     * It will gracefully continue if the file doesn't exist, allowing the app
+     * to rely solely on system-level environment variables in production.
      */
     public static function loadEnvironment(): void
     {
@@ -28,24 +28,24 @@ class Config
             return;
         }
 
-        // Determine the root directory of the project.
+        // Determine the project root directory.
         $rootDir = __DIR__;
-        
-        // Load the .env file using the vlucas/phpdotenv package.
-        try {
+
+        // Load .env file ONLY if it exists (for local development)
+        if (file_exists($rootDir . '/.env')) {
             $dotenv = Dotenv::createImmutable($rootDir);
             $dotenv->load();
-            self::$isLoaded = true;
-        } catch (\Exception $e) {
-            // In a production environment, you might log this error instead of throwing.
-            // For development, stopping execution is helpful.
-            error_log("FATAL CONFIG ERROR: Could not load .env file. Details: " . $e->getMessage());
-            die("FATAL ERROR: Environment configuration missing.");
         }
+
+        // Mark as loaded regardless of whether .env was found or not.
+        self::$isLoaded = true;
     }
 
     /**
      * Retrieves a value from the environment variables.
+     *
+     * It checks variables set by the system first, then falls back to those
+     * loaded from the .env file.
      *
      * @param string $key The key of the environment variable (e.g., 'TELEGRAM_BOT_TOKEN').
      * @return string The value of the environment variable.
@@ -57,14 +57,18 @@ class Config
             // Ensure environment is loaded before attempting to access variables
             self::loadEnvironment();
         }
-        
-        $value = $_ENV[$key] ?? null;
 
-        if ($value === null) {
+        // phpdotenv loads into $_ENV, but getenv() is a reliable way to check all sources.
+        // We'll check $_ENV first as phpdotenv populates it.
+        $value = $_ENV[$key] ?? getenv($key);
+
+        if ($value === false || $value === null) {
+            // Log the error for easier debugging on the server.
+            error_log("FATAL CONFIG ERROR: Configuration key '{$key}' not found in environment.");
             throw new \Exception("Configuration key '{$key}' not found in environment.");
         }
 
-        return $value;
+        return (string)$value;
     }
 
     /**
