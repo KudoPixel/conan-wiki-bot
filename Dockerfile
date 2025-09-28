@@ -1,53 +1,52 @@
-# Use a lean base image for PHP-FPM on Alpine Linux
-FROM php:8.3-fpm-alpine
+# =================================================================
+# Detective Conan Bot - Dockerfile (Based on Debian/Apache - Optimized)
+# =================================================================
 
-# Core Setup: Install necessary system packages for PHP extensions
-# We only install packages required for Composer (zip) and standard extensions (intl).
-RUN apk update && apk add --no-cache \
-    git \
-    curl \
-    libxml2-dev \
+# --- Base Stage: Use a stable PHP image with Apache (Debian) ---
+# Using PHP 8.3 for best performance and support.
+FROM php:8.3-apache
+
+# --- 1. System Dependencies & PHP Extensions ---
+# Install system libraries (only essentials for zip, curl, and intl).
+RUN apt-get update && apt-get install -y \
     libzip-dev \
-    # zlib-dev is required for the zip extension
-    zlib-dev \
-    # icu-dev is required for the intl extension
-    icu-dev 
+    unzip \
+    libicu-dev \
+    libcurl4-openssl-dev \
+    # Clean up cached files to keep the image small
+    && apt-get clean && rm -rf /var/lib/apt/lists/* # Enable Apache rewrite module (essential for routing)
+RUN a2enmod rewrite
 
-# Install PHP extensions
-# json: Essential for JSON file handling and API payloads
-# zip: Necessary for Composer dependency management
-# intl: Required by Monolog and for general localization/formatting
-# curl: Essential for Guzzle and handling API communications (like Gemini)
+# Install required PHP extensions (API communication, JSON, Composer, Monolog)
+# Removed pdo/pgsql extensions as they are not needed for a webhook bot.
 RUN docker-php-ext-install \
     json \
     zip \
     intl \
     curl
 
-# Install Composer (PHP Dependency Manager)
-# Copying it from the official Composer image for simplicity and latest version
+# --- 2. Apache Configuration for Webhook ---
+# We copy a custom vhost configuration tailored to send all traffic
+# to our single entry point: webhook.php
+# NOTE: This assumes you place the vhost.conf file in a .docker/ directory.
+COPY .docker/vhost.conf /etc/apache2/sites-available/000-default.conf
+
+# --- 3. Composer Installation ---
+# Install Composer, the PHP dependency manager.
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set the main application working directory
-WORKDIR /app
+# --- 4. Application Build ---
+# Set the working directory (standard Apache root).
+WORKDIR /var/www/html
 
-# Copy project files
-# Copy Composer files first to leverage Docker layer caching
+# Copy composer files first to leverage Docker's layer caching.
 COPY composer.json composer.lock ./
 # Install dependencies (skipping dev dependencies and optimizing autoloader)
-RUN composer install --no-dev --optimize-autoloader
+RUN composer install --no-interaction --no-dev --optimize-autoloader
 
-# Copy the rest of the application source code
-COPY . /app
+# Now, copy the rest of the application code.
+COPY . .
 
-# Set correct permissions for the web server user (www-data)
-# Important for cloud environments (like Render) to ensure log/config files are writable
-RUN chown -R www-data:www-data /app
-
-# Define the entry point: Start the PHP-FPM process
-# FPM listens for requests from a web server (like Nginx)
-CMD ["php-fpm"]
-
-# Expose the standard FPM port
-# The external web service will connect to this port
-EXPOSE 9000
+# --- 5. Final Touches: Permissions ---
+# Ensure the web server user owns the files.
+RUN chown -R www-data:www-data /var/www/html
