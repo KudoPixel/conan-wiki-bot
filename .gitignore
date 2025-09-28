@@ -1,0 +1,6 @@
+# PHP dependencies
+vendor/
+
+# Environment variables
+.env
+.env.local
