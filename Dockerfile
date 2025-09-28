@@ -7,23 +7,23 @@
 FROM php:8.3-apache
 
 # --- 1. System Dependencies & PHP Extensions ---
-# Install system libraries (only essentials for zip, curl, and intl).
+# Install system libraries and PHP extensions in a single layer for efficiency.
+# We removed 'json' because it's already included in PHP 8.3!
 RUN apt-get update && apt-get install -y \
     libzip-dev \
     unzip \
     libicu-dev \
     libcurl4-openssl-dev \
-    # Clean up cached files to keep the image small
-    && apt-get clean && rm -rf /var/lib/apt/lists/* # Enable Apache rewrite module (essential for routing)
-RUN a2enmod rewrite
-
-# Install required PHP extensions (API communication, JSON, Composer, Monolog)
-# Removed pdo/pgsql extensions as they are not needed for a webhook bot.
-RUN docker-php-ext-install \
-    json \
+    # Install required PHP extensions
+    && docker-php-ext-install \
     zip \
     intl \
-    curl
+    curl \
+    # Clean up cached files to keep the image small
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Enable Apache rewrite module (essential for routing)
+RUN a2enmod rewrite
 
 # --- 2. Apache Configuration for Webhook ---
 # We copy a custom vhost configuration tailored to send all traffic
