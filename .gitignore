@@ -4,3 +4,5 @@ vendor/
 # Environment variables
 .env
 .env.local
+
+logs/
